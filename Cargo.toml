@@ -1,7 +1,21 @@
 [package]
 name = "node_graph"
+description = "A simple framework for applications that use node graphs"
+readme = "README.md"
 version = "0.1.0"
+repository = "https://github.com/Hugo4IT/node_graph"
+license-file = "LICENSE"
+keywords = ["nodes", "graph", "visual", "framework", "simulation"]
+categories = [
+    "data-structures",
+    "emulators",
+    "game-development",
+    "graphics",
+    "visualization",
+]
 edition = "2024"
+authors = ["Hugo4IT"]
+
 
 [dependencies]
 parking_lot = "0.12.5"
