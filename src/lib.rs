@@ -65,7 +65,8 @@ impl<N: Node> Graph<N> {
         self.output_ports.get(port.resolve(&self))
     }
 
-    pub fn create_node(&mut self, node: N) -> NodeId {
+    pub fn create_node(&mut self, node: impl Into<N>) -> NodeId {
+        let node: N = node.into();
         let initial_ports = node.initial_ports();
 
         let id = self.node_data.insert_with_key(|node_id| {
@@ -73,10 +74,13 @@ impl<N: Node> Graph<N> {
 
             // Add node initial ports
 
-            for &(name, ty) in initial_ports.inputs.iter() {
-                let id = self
-                    .input_ports
-                    .insert(Port::new(node_id, name.to_string(), ty));
+            for &(name, ty, ref default) in initial_ports.inputs.iter() {
+                let id = self.input_ports.insert(Port::new(
+                    node_id,
+                    name.to_string(),
+                    ty,
+                    Some(default.clone()),
+                ));
 
                 node_data.inputs.push((name.to_string(), id));
             }
@@ -84,7 +88,7 @@ impl<N: Node> Graph<N> {
             for &(name, ty) in initial_ports.outputs.iter() {
                 let id = self
                     .output_ports
-                    .insert(Port::new(node_id, name.to_string(), ty));
+                    .insert(Port::new(node_id, name.to_string(), ty, None));
 
                 node_data.outputs.push((name.to_string(), id));
             }
@@ -99,10 +103,11 @@ impl<N: Node> Graph<N> {
 
     pub fn create_node_with<const INPUTS: usize, const OUTPUTS: usize>(
         &mut self,
-        node: N,
-        inputs: [(&str, N::DataType); INPUTS],
+        node: impl Into<N>,
+        inputs: [(&str, N::DataType, N::DataValue); INPUTS],
         outputs: [(&str, N::DataType); OUTPUTS],
     ) -> (NodeId, [InputPortId; INPUTS], [OutputPortId; OUTPUTS]) {
+        let node: N = node.into();
         let initial_ports = node.initial_ports();
 
         let mut input_ports = [InputPortId::null(); INPUTS];
@@ -113,10 +118,13 @@ impl<N: Node> Graph<N> {
 
             // First add initial ports
 
-            for &(name, ty) in initial_ports.inputs.iter() {
-                let id = self
-                    .input_ports
-                    .insert(Port::new(node_id, name.to_string(), ty));
+            for &(name, ty, ref default) in initial_ports.inputs.iter() {
+                let id = self.input_ports.insert(Port::new(
+                    node_id,
+                    name.to_string(),
+                    ty,
+                    Some(default.clone()),
+                ));
 
                 node_data.inputs.push((name.to_string(), id));
             }
@@ -124,17 +132,20 @@ impl<N: Node> Graph<N> {
             for &(name, ty) in initial_ports.outputs.iter() {
                 let id = self
                     .output_ports
-                    .insert(Port::new(node_id, name.to_string(), ty));
+                    .insert(Port::new(node_id, name.to_string(), ty, None));
 
                 node_data.outputs.push((name.to_string(), id));
             }
 
             // Then add user ports
 
-            for (i, (name, ty)) in inputs.into_iter().enumerate() {
-                let id = self
-                    .input_ports
-                    .insert(Port::new(node_id, name.to_string(), ty));
+            for (i, (name, ty, default)) in inputs.into_iter().enumerate() {
+                let id = self.input_ports.insert(Port::new(
+                    node_id,
+                    name.to_string(),
+                    ty,
+                    Some(default),
+                ));
 
                 node_data.inputs.push((name.to_string(), id));
                 input_ports[i] = id;
@@ -143,7 +154,7 @@ impl<N: Node> Graph<N> {
             for (i, (name, ty)) in outputs.into_iter().enumerate() {
                 let id = self
                     .output_ports
-                    .insert(Port::new(node_id, name.to_string(), ty));
+                    .insert(Port::new(node_id, name.to_string(), ty, None));
 
                 node_data.outputs.push((name.to_string(), id));
                 output_ports[i] = id;
@@ -157,7 +168,13 @@ impl<N: Node> Graph<N> {
         (id, input_ports, output_ports)
     }
 
-    pub fn create_input_port(&mut self, node: NodeId, name: &str, ty: N::DataType) -> InputPortId {
+    pub fn create_input_port(
+        &mut self,
+        node: NodeId,
+        name: &str,
+        ty: N::DataType,
+        default: N::DataValue,
+    ) -> InputPortId {
         let data = self.node_data.get_mut(node).expect("Node does not exist");
 
         if data.inputs.iter().any(|(port_name, _)| port_name == name) {
@@ -166,7 +183,7 @@ impl<N: Node> Graph<N> {
 
         let id = self
             .input_ports
-            .insert(Port::new(node, name.to_string(), ty));
+            .insert(Port::new(node, name.to_string(), ty, Some(default)));
 
         data.inputs.push((name.to_string(), id));
 
@@ -190,7 +207,7 @@ impl<N: Node> Graph<N> {
 
         let id = self
             .output_ports
-            .insert(Port::new(node, name.to_string(), ty));
+            .insert(Port::new(node, name.to_string(), ty, None));
 
         data.outputs.push((name.to_string(), id));
 
@@ -308,6 +325,15 @@ impl<N: Node> Graph<N> {
         let node = self.node_data.get(node)?;
 
         Some(&node.inputs)
+    }
+
+    pub fn set_default_value(&mut self, port: impl InputPortReference, value: N::DataValue) {
+        let port = self
+            .input_ports
+            .get_mut(port.resolve(&self))
+            .expect("Input port does not exist");
+
+        port.default = Some(value);
     }
 
     pub fn get_output_ports(&self, node: NodeId) -> Option<&Vec<(String, OutputPortId)>> {
@@ -448,30 +474,38 @@ impl<N: Node> Graph<N> {
     }
 }
 
+impl<N: Node + PartialEq> Graph<N> {
+    pub fn find<'a>(&'a self, node: &'a N) -> impl Iterator<Item = NodeId> + 'a {
+        self.nodes
+            .iter()
+            .filter_map(|(id, other)| other.read().eq(node).then_some(id))
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct NodeData {
     inputs: Vec<(String, InputPortId)>,
     outputs: Vec<(String, OutputPortId)>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct InitialPorts<N: Node> {
-    pub inputs: &'static [(&'static str, N::DataType)],
-    pub outputs: &'static [(&'static str, N::DataType)],
+    pub inputs: Vec<(&'static str, N::DataType, N::DataValue)>,
+    pub outputs: Vec<(&'static str, N::DataType)>,
 }
 
 impl<N: Node> Default for InitialPorts<N> {
     fn default() -> Self {
         Self {
-            inputs: &[],
-            outputs: &[],
+            inputs: Vec::new(),
+            outputs: Vec::new(),
         }
     }
 }
 
 pub trait Node: Sized + 'static {
     type DataType: DataType;
-    type DataValue: DataValue<Self::DataType>;
+    type DataValue: Debug + Clone + 'static;
 
     fn initial_ports(&self) -> InitialPorts<Self> {
         Default::default()
@@ -510,21 +544,6 @@ pub trait DataType: Debug + Clone + Copy + Eq {
 
 impl DataType for () {}
 
-pub trait DataValue<T: DataType>: Clone + 'static {
-    fn ty(&self) -> T;
-    fn default_for(ty: T) -> Self;
-
-    fn convert_to(&self, ty: T) -> Self {
-        if self.ty() == ty {
-            self.clone()
-        } else {
-            panic!("Cannot convert to this type, did you forget to implement convert_to()?")
-        }
-    }
-
-    fn flatten<'a>(values: impl Iterator<Item = &'a Self>) -> Self;
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Connection {
     start_port: OutputPortId,
@@ -536,16 +555,18 @@ pub struct Port<N: Node> {
     pub node: NodeId,
     pub name: String,
     pub ty: N::DataType,
+    pub default: Option<N::DataValue>,
     pub incoming_connections: Vec<ConnectionId>,
     pub outgoing_connections: Vec<ConnectionId>,
 }
 
 impl<N: Node> Port<N> {
-    pub fn new(node: NodeId, name: String, ty: N::DataType) -> Self {
+    pub fn new(node: NodeId, name: String, ty: N::DataType, default: Option<N::DataValue>) -> Self {
         Self {
             node,
             name,
             ty,
+            default,
             incoming_connections: Vec::new(),
             outgoing_connections: Vec::new(),
         }

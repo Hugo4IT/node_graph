@@ -1,7 +1,7 @@
 use slotmap::SecondaryMap;
 
 use crate::{
-    DataValue, Graph, INVALID_STATE, Node, NodeId, OutputPortId,
+    Graph, INVALID_STATE, Node, NodeId, OutputPortId,
     analyzer::GraphAnalyzer,
     reference::{NodeInputIdentifier, NodeOutputIdentifier, OutputPortReference},
 };
@@ -17,13 +17,23 @@ impl<'a, 'b, N: Node> GraphWalkContext<'a, 'b, N> {
     pub fn get<'c>(&self, input: impl NodeInputIdentifier<'c>) -> N::DataValue {
         let input = input.combine(self.node);
 
-        <N::DataValue as DataValue<N::DataType>>::flatten(
-            self.graph.get_incoming_connections(input).map(|port| {
+        self.graph
+            .get_incoming_connections(input)
+            .map(|port| {
                 self.output_cache
                     .get(port)
                     .expect("Missing output value of dependency node")
-            }),
-        )
+            })
+            .cloned()
+            .next()
+            .unwrap_or_else(|| {
+                self.graph
+                    .get_input_port_info(input)
+                    .expect(INVALID_STATE)
+                    .default
+                    .clone()
+                    .expect("No default value present for disconnected port")
+            })
     }
 
     /// Set the value of an output port
@@ -61,6 +71,14 @@ impl<'a, N: Node> GraphWalker<'a, N> {
         }
     }
 
+    pub fn from_path(graph: &'a Graph<N>, path: Vec<NodeId>) -> Self {
+        Self {
+            graph,
+            path,
+            output_cache: SecondaryMap::with_capacity(graph.node_data.len()),
+        }
+    }
+
     pub fn walk<F: for<'b> Fn(&mut N, &mut GraphWalkContext<'a, 'b, N>)>(&mut self, callback: F) {
         self.output_cache.clear();
 
@@ -73,6 +91,22 @@ impl<'a, N: Node> GraphWalker<'a, N> {
             };
 
             callback(&mut node, &mut context);
+        }
+    }
+
+    pub fn graph(&'a self) -> &'a Graph<N> {
+        self.graph
+    }
+
+    pub fn path(&self) -> &[NodeId] {
+        &self.path
+    }
+
+    pub fn get<'b>(&'b mut self, node: NodeId) -> GraphWalkContext<'a, 'b, N> {
+        GraphWalkContext {
+            graph: self.graph,
+            output_cache: &mut self.output_cache,
+            node,
         }
     }
 }

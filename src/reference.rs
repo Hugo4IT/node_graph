@@ -44,7 +44,7 @@ impl<'a> NodeOutputIdentifier<'a> for &'a str {
     }
 }
 
-pub trait InputPortReference {
+pub trait InputPortReference: Copy {
     fn resolve<N: Node>(&self, graph: &Graph<N>) -> InputPortId;
 }
 
