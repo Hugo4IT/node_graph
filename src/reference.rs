@@ -45,22 +45,22 @@ impl<'a> NodeOutputIdentifier<'a> for &'a str {
 }
 
 pub trait InputPortReference: Copy {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> InputPortId;
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<InputPortId>;
 }
 
 impl InputPortReference for InputPortId {
-    fn resolve<N: Node>(&self, _graph: &Graph<N>) -> InputPortId {
-        *self
+    fn resolve<N: Node>(&self, _graph: &Graph<N>) -> Option<InputPortId> {
+        Some(*self)
     }
 }
 
 pub trait OutputPortReference {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> OutputPortId;
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<OutputPortId>;
 }
 
 impl OutputPortReference for OutputPortId {
-    fn resolve<N: Node>(&self, _graph: &Graph<N>) -> OutputPortId {
-        *self
+    fn resolve<N: Node>(&self, _graph: &Graph<N>) -> Option<OutputPortId> {
+        Some(*self)
     }
 }
 
@@ -68,10 +68,8 @@ impl OutputPortReference for OutputPortId {
 pub struct NodeInputIndexReference(NodeId, usize);
 
 impl InputPortReference for NodeInputIndexReference {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> InputPortId {
-        graph
-            .get_input_port_at(self.0, self.1)
-            .expect("Invalid input port")
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<InputPortId> {
+        graph.get_input_port_at(self.0, self.1)
     }
 }
 
@@ -79,10 +77,8 @@ impl InputPortReference for NodeInputIndexReference {
 pub struct NodeOutputIndexReference(NodeId, usize);
 
 impl OutputPortReference for NodeOutputIndexReference {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> OutputPortId {
-        graph
-            .get_output_port_at(self.0, self.1)
-            .expect("Invalid output port")
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<OutputPortId> {
+        graph.get_output_port_at(self.0, self.1)
     }
 }
 
@@ -90,10 +86,8 @@ impl OutputPortReference for NodeOutputIndexReference {
 pub struct NodeInputNameReference<'a>(NodeId, &'a str);
 
 impl<'a> InputPortReference for NodeInputNameReference<'a> {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> InputPortId {
-        graph
-            .get_input_port(self.0, self.1)
-            .expect("Invalid input port")
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<InputPortId> {
+        graph.get_input_port(self.0, self.1)
     }
 }
 
@@ -101,10 +95,8 @@ impl<'a> InputPortReference for NodeInputNameReference<'a> {
 pub struct NodeOutputNameReference<'a>(NodeId, &'a str);
 
 impl<'a> OutputPortReference for NodeOutputNameReference<'a> {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> OutputPortId {
-        graph
-            .get_output_port(self.0, self.1)
-            .expect("Invalid output port")
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<OutputPortId> {
+        graph.get_output_port(self.0, self.1)
     }
 }
 
@@ -115,7 +107,7 @@ pub enum NodeInputDynamicReference<'a> {
 }
 
 impl<'a> InputPortReference for NodeInputDynamicReference<'a> {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> InputPortId {
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<InputPortId> {
         match self {
             Self::Index(r) => r.resolve(graph),
             Self::Name(r) => r.resolve(graph),
@@ -130,7 +122,7 @@ pub enum NodeOutputDynamicReference<'a> {
 }
 
 impl<'a> OutputPortReference for NodeOutputDynamicReference<'a> {
-    fn resolve<N: Node>(&self, graph: &Graph<N>) -> OutputPortId {
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<OutputPortId> {
         match self {
             Self::Index(r) => r.resolve(graph),
             Self::Name(r) => r.resolve(graph),

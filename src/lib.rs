@@ -58,11 +58,11 @@ impl<N: Node> Graph<N> {
     }
 
     pub fn get_input_port_info(&self, port: impl InputPortReference) -> Option<&Port<N>> {
-        self.input_ports.get(port.resolve(&self))
+        self.input_ports.get(port.resolve(&self)?)
     }
 
     pub fn get_output_port_info(&self, port: impl OutputPortReference) -> Option<&Port<N>> {
-        self.output_ports.get(port.resolve(&self))
+        self.output_ports.get(port.resolve(&self)?)
     }
 
     pub fn create_node(&mut self, node: impl Into<N>) -> NodeId {
@@ -219,7 +219,7 @@ impl<N: Node> Graph<N> {
 
     #[must_use]
     pub fn delete_input_port(&mut self, port: impl InputPortReference) -> Option<()> {
-        let port = port.resolve(&self);
+        let port = port.resolve(&self)?;
 
         let mut port = self.input_ports.remove(port)?;
 
@@ -257,7 +257,7 @@ impl<N: Node> Graph<N> {
 
     #[must_use]
     pub fn delete_output_port(&mut self, port: impl OutputPortReference) -> Option<()> {
-        let port = port.resolve(&self);
+        let port = port.resolve(&self)?;
 
         let mut port = self.output_ports.remove(port)?;
 
@@ -330,7 +330,7 @@ impl<N: Node> Graph<N> {
     pub fn set_default_value(&mut self, port: impl InputPortReference, value: N::DataValue) {
         let port = self
             .input_ports
-            .get_mut(port.resolve(&self))
+            .get_mut(port.resolve(&self).expect("Port does not exist"))
             .expect("Input port does not exist");
 
         port.default = Some(value);
@@ -346,7 +346,7 @@ impl<N: Node> Graph<N> {
         &self,
         port: impl InputPortReference,
     ) -> impl Iterator<Item = OutputPortId> + '_ {
-        let port = port.resolve(&self);
+        let port = port.resolve(&self).expect("Port does not exist");
         let port = self
             .input_ports
             .get(port)
@@ -364,7 +364,7 @@ impl<N: Node> Graph<N> {
         &self,
         port: impl OutputPortReference,
     ) -> impl Iterator<Item = InputPortId> + '_ {
-        let port = port.resolve(&self);
+        let port = port.resolve(&self).expect("Port does not exist");
         let port = self
             .output_ports
             .get(port)
@@ -406,8 +406,11 @@ impl<N: Node> Graph<N> {
         start_port: impl OutputPortReference,
         end_port: impl InputPortReference,
     ) -> bool {
-        let start_port = start_port.resolve(&self);
-        let end_port = end_port.resolve(&self);
+        let start_port = start_port
+            .resolve(&self)
+            .expect("Start port does not exist");
+
+        let end_port = end_port.resolve(&self).expect("End port does not exist");
 
         let start = self
             .output_ports
@@ -427,8 +430,11 @@ impl<N: Node> Graph<N> {
         start_port: impl OutputPortReference,
         end_port: impl InputPortReference,
     ) -> ConnectionId {
-        let start_port = start_port.resolve(&self);
-        let end_port = end_port.resolve(&self);
+        let start_port = start_port
+            .resolve(&self)
+            .expect("Start port does not exist");
+
+        let end_port = end_port.resolve(&self).expect("End port does not exist`");
 
         let connection = Connection {
             start_port,

@@ -3,7 +3,9 @@ use slotmap::SecondaryMap;
 use crate::{
     Graph, INVALID_STATE, Node, NodeId, OutputPortId,
     analyzer::GraphAnalyzer,
-    reference::{NodeInputIdentifier, NodeOutputIdentifier, OutputPortReference},
+    reference::{
+        InputPortReference, NodeInputIdentifier, NodeOutputIdentifier, OutputPortReference,
+    },
 };
 
 pub struct GraphWalkContext<'a, 'b, N: Node> {
@@ -19,11 +21,7 @@ impl<'a, 'b, N: Node> GraphWalkContext<'a, 'b, N> {
 
         self.graph
             .get_incoming_connections(input)
-            .map(|port| {
-                self.output_cache
-                    .get(port)
-                    .expect("Missing output value of dependency node")
-            })
+            .filter_map(|port| self.output_cache.get(port))
             .cloned()
             .next()
             .unwrap_or_else(|| {
@@ -40,13 +38,20 @@ impl<'a, 'b, N: Node> GraphWalkContext<'a, 'b, N> {
     pub fn set<'c>(&mut self, output: impl NodeOutputIdentifier<'c>, value: N::DataValue) {
         let output = output.combine(self.node);
 
-        if self
-            .output_cache
-            .insert(output.resolve(self.graph), value)
-            .is_some()
-        {
-            eprintln!("WARN: An output value was set twice (or cache was not cleared)");
-        }
+        self.output_cache.insert(
+            output
+                .resolve(self.graph)
+                .expect("Output port does not exist"),
+            value,
+        );
+    }
+
+    pub fn can_get(&self, input: impl NodeInputIdentifier<'a>) -> bool {
+        input.combine(self.node).resolve(self.graph).is_some()
+    }
+
+    pub fn can_set(&self, input: impl NodeOutputIdentifier<'a>) -> bool {
+        input.combine(self.node).resolve(self.graph).is_some()
     }
 }
 
@@ -71,17 +76,20 @@ impl<'a, N: Node> GraphWalker<'a, N> {
         }
     }
 
-    pub fn from_path(graph: &'a Graph<N>, path: Vec<NodeId>) -> Self {
+    pub fn from_path(
+        graph: &'a Graph<N>,
+        path: Vec<NodeId>,
+        cache: Option<SecondaryMap<OutputPortId, N::DataValue>>,
+    ) -> Self {
         Self {
             graph,
             path,
-            output_cache: SecondaryMap::with_capacity(graph.node_data.len()),
+            output_cache: cache
+                .unwrap_or_else(|| SecondaryMap::with_capacity(graph.node_data.len())),
         }
     }
 
     pub fn walk<F: for<'b> Fn(&mut N, &mut GraphWalkContext<'a, 'b, N>)>(&mut self, callback: F) {
-        self.output_cache.clear();
-
         for &id in self.path.iter() {
             let mut node = self.graph.get_node_mut(id).expect(INVALID_STATE);
             let mut context = GraphWalkContext {
@@ -108,5 +116,9 @@ impl<'a, N: Node> GraphWalker<'a, N> {
             output_cache: &mut self.output_cache,
             node,
         }
+    }
+
+    pub fn release_cache(self) -> SecondaryMap<OutputPortId, N::DataValue> {
+        self.output_cache
     }
 }
