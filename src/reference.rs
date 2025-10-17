@@ -129,3 +129,15 @@ impl<'a> OutputPortReference for NodeOutputDynamicReference<'a> {
         }
     }
 }
+
+impl InputPortReference for NodeId {
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<InputPortId> {
+        graph.get_input_port_at(*self, 0)
+    }
+}
+
+impl OutputPortReference for NodeId {
+    fn resolve<N: Node>(&self, graph: &Graph<N>) -> Option<OutputPortId> {
+        graph.get_output_port_at(*self, 0)
+    }
+}

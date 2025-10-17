@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod macros;
 pub mod reference;
 pub mod walker;
 
@@ -477,6 +478,12 @@ impl<N: Node> Graph<N> {
         end_node.write().input_connection_added(end_port, id);
 
         id
+    }
+}
+
+impl<N: Node> Default for Graph<N> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
