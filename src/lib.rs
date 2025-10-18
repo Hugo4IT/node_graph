@@ -328,7 +328,13 @@ impl<N: Node> Graph<N> {
         Some(&node.inputs)
     }
 
-    pub fn set_default_value(&mut self, port: impl InputPortReference, value: N::DataValue) {
+    pub fn set_default_value(
+        &mut self,
+        port: impl InputPortReference,
+        value: impl Into<N::DataValue>,
+    ) {
+        let value: N::DataValue = value.into();
+
         let port = self
             .input_ports
             .get_mut(port.resolve(&self).expect("Port does not exist"))

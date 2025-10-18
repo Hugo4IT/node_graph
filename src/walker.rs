@@ -8,9 +8,11 @@ use crate::{
     },
 };
 
+pub type OutputCache<T> = SecondaryMap<OutputPortId, T>;
+
 pub struct GraphWalkContext<'a, 'b, N: Node> {
     graph: &'a Graph<N>,
-    output_cache: &'b mut SecondaryMap<OutputPortId, N::DataValue>,
+    output_cache: &'b mut OutputCache<N::DataValue>,
     node: NodeId,
 }
 
@@ -34,8 +36,25 @@ impl<'a, 'b, N: Node> GraphWalkContext<'a, 'b, N> {
             })
     }
 
+    pub fn get_all<'c>(
+        &self,
+        input: impl NodeInputIdentifier<'c>,
+    ) -> impl Iterator<Item = N::DataValue> + '_ {
+        let input = input.combine(self.node);
+
+        self.graph
+            .get_incoming_connections(input)
+            .filter_map(|port| self.output_cache.get(port))
+            .cloned()
+    }
+
     /// Set the value of an output port
-    pub fn set<'c>(&mut self, output: impl NodeOutputIdentifier<'c>, value: N::DataValue) {
+    pub fn set<'c>(
+        &mut self,
+        output: impl NodeOutputIdentifier<'c>,
+        value: impl Into<N::DataValue>,
+    ) {
+        let value: N::DataValue = value.into();
         let output = output.combine(self.node);
 
         self.output_cache.insert(
