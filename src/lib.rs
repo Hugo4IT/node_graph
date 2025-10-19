@@ -66,8 +66,8 @@ impl<N: Node> Graph<N> {
         self.output_ports.get(port.resolve(&self)?)
     }
 
-    pub fn create_node(&mut self, node: impl Into<N>) -> NodeId {
-        let node: N = node.into();
+    pub fn create_node<T: NodeTemplate<N>>(&mut self, node: T) -> NodeId {
+        let (node, callback) = node.split();
         let initial_ports = node.initial_ports();
 
         let id = self.node_data.insert_with_key(|node_id| {
@@ -99,16 +99,18 @@ impl<N: Node> Graph<N> {
 
         self.nodes.insert(id, RwLock::new(node));
 
+        callback.post_create(self, id);
+
         id
     }
 
-    pub fn create_node_with<const INPUTS: usize, const OUTPUTS: usize>(
+    pub fn create_node_with<T: NodeTemplate<N>, const INPUTS: usize, const OUTPUTS: usize>(
         &mut self,
-        node: impl Into<N>,
+        node: T,
         inputs: [(&str, N::DataType, N::DataValue); INPUTS],
         outputs: [(&str, N::DataType); OUTPUTS],
     ) -> (NodeId, [InputPortId; INPUTS], [OutputPortId; OUTPUTS]) {
-        let node: N = node.into();
+        let (node, callback) = node.split();
         let initial_ports = node.initial_ports();
 
         let mut input_ports = [InputPortId::null(); INPUTS];
@@ -165,6 +167,8 @@ impl<N: Node> Graph<N> {
         });
 
         self.nodes.insert(id, RwLock::new(node));
+
+        callback.post_create(self, id);
 
         (id, input_ports, output_ports)
     }
@@ -589,5 +593,32 @@ impl<N: Node> Port<N> {
             incoming_connections: Vec::new(),
             outgoing_connections: Vec::new(),
         }
+    }
+}
+
+pub trait NodeTemplate<N: Node> {
+    type Callback: NodeTemplateCallback<N>;
+
+    fn split(self) -> (N, Self::Callback);
+}
+
+pub trait NodeTemplateCallback<N: Node> {
+    fn post_create(self, graph: &mut Graph<N>, node_id: NodeId);
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EmptyNodeCallback;
+
+impl<N: Node> NodeTemplateCallback<N> for EmptyNodeCallback {
+    fn post_create(self, graph: &mut Graph<N>, node_id: NodeId) {
+        let _ = (graph, node_id);
+    }
+}
+
+impl<T: Into<N>, N: Node> NodeTemplate<N> for T {
+    type Callback = EmptyNodeCallback;
+
+    fn split(self) -> (N, EmptyNodeCallback) {
+        (self.into(), EmptyNodeCallback)
     }
 }
